@@ -1,55 +1,66 @@
+require('dotenv').config();
 const express = require('express');
-const bodyParser = require('body-parser');
-const cors = require('cors');
 const mongoose = require('mongoose');
-require('dotenv').config(); // Load environment variables from a `.env` file
+const cors = require('cors');
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
+app.use(express.json());
 
-// MongoDB Atlas connection
-const mongoURI = process.env.MONGO_URI; // Fetch MongoDB URI from environment variables
-
-mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
+// MongoDB Atlas Connection
+mongoose
+  .connect(process.env.MONGO_ATLAS_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
   .then(() => console.log('Connected to MongoDB Atlas'))
   .catch((err) => console.error('Failed to connect to MongoDB Atlas:', err));
 
 // Define User schema
 const userSchema = new mongoose.Schema({
-  name: String,
-  age: Number,
-  gender: String,
-  logins: Number,
-  clickRate: Number
+  name: { type: String, required: true },
+  age: { type: Number, required: true },
+  gender: { type: String, required: true, enum: ['male', 'female'] },
+  logins: { type: Number, default: 0 },
+  clickRate: { type: Number, default: 0 },
 });
 
 const User = mongoose.model('User', userSchema);
 
 // Define Segment schema
 const segmentSchema = new mongoose.Schema({
-  name: String,
-  filters: Object
+  name: { type: String, required: true },
+  filters: { type: Object, required: true },
 });
 
 const Segment = mongoose.model('Segment', segmentSchema);
 
-// Sample data
+// Insert sample data only if collection is empty
 const sampleUsers = [
   { name: 'John Doe', age: 25, gender: 'male', logins: 5, clickRate: 45 },
   { name: 'Jane Smith', age: 30, gender: 'female', logins: 10, clickRate: 65 },
   { name: 'Sam Johnson', age: 22, gender: 'male', logins: 2, clickRate: 20 },
   { name: 'Anna Lee', age: 28, gender: 'female', logins: 8, clickRate: 50 },
-  { name: 'Mike Brown', age: 35, gender: 'male', logins: 15, clickRate: 75 }
+  { name: 'Mike Brown', age: 35, gender: 'male', logins: 15, clickRate: 75 },
 ];
 
-// Insert data
-User.insertMany(sampleUsers)
-  .then(() => console.log('Data inserted successfully'))
-  .catch((error) => console.error('Error inserting data:', error));
+const insertSampleUsers = async () => {
+  try {
+    const count = await User.countDocuments();
+    if (count === 0) {
+      await User.insertMany(sampleUsers);
+      console.log('Sample data inserted successfully');
+    } else {
+      console.log('Sample data already exists');
+    }
+  } catch (error) {
+    console.error('Error inserting sample data:', error);
+  }
+};
+insertSampleUsers();
 
 // Routes
 app.get('/api/segments', async (req, res) => {
@@ -57,14 +68,15 @@ app.get('/api/segments', async (req, res) => {
     const segments = await Segment.find();
     res.json(segments);
   } catch (error) {
-    res.status(500).send('Error fetching segments');
+    res.status(500).json({ message: 'Error fetching segments', error });
   }
 });
 
 app.post('/api/segments', async (req, res) => {
   const { name, filters } = req.body;
+
   if (!name || !filters) {
-    return res.status(400).send('Segment name and filters are required.');
+    return res.status(400).json({ message: 'Segment name and filters are required.' });
   }
 
   const newSegment = new Segment({ name, filters });
@@ -73,7 +85,7 @@ app.post('/api/segments', async (req, res) => {
     await newSegment.save();
     res.status(201).json(newSegment);
   } catch (error) {
-    res.status(500).send('Error saving segment');
+    res.status(500).json({ message: 'Error saving segment', error });
   }
 });
 
@@ -81,27 +93,21 @@ app.post('/api/users/segment', async (req, res) => {
   const { filters } = req.body;
   const query = {};
 
-  // Name filter
   if (filters.name) {
     query.name = new RegExp(filters.name, 'i'); // case-insensitive regex
   }
-
-  // Age range filter
   if (filters.ageRange) {
-    query.age = { $gte: filters.ageRange.min || 0, $lte: filters.ageRange.max || 100 };
+    query.age = {
+      $gte: filters.ageRange.min || 0,
+      $lte: filters.ageRange.max || 100,
+    };
   }
-
-  // Gender filter
   if (filters.gender && filters.gender !== 'all') {
     query.gender = filters.gender;
   }
-
-  // Minimum logins filter
   if (filters.logins) {
     query.logins = { $gte: filters.logins };
   }
-
-  // Minimum click rate filter
   if (filters.clickRate) {
     query.clickRate = { $gte: filters.clickRate };
   }
@@ -110,7 +116,7 @@ app.post('/api/users/segment', async (req, res) => {
     const users = await User.find(query);
     res.json(users);
   } catch (error) {
-    res.status(500).send('Error filtering users');
+    res.status(500).json({ message: 'Error filtering users', error });
   }
 });
 

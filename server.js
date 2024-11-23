@@ -2,7 +2,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const mongoose = require('mongoose');
- // Load environment variables from a `.env` file
+require('dotenv').config(); // Load environment variables from a `.env` file
 
 const app = express();
 const port = 3001;
@@ -12,8 +12,8 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // MongoDB Atlas connection
-// const mongoURI = process.env.MONGO_URI; // Fetch MongoDB URI from environment variables
-const mongoURI = "mongodb+srv://ajayvissu2000:ajay@cluster0.rjdnj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+const mongoURI = process.env.MONGO_URI; // Fetch MongoDB URI from environment variables
+
 mongoose.connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log('Connected to MongoDB Atlas'))
   .catch((err) => console.error('Failed to connect to MongoDB Atlas:', err));

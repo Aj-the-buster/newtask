@@ -42,13 +42,29 @@ mongoose.connection.on('disconnected', () => {
 
 // Define User schema
 const userSchema = new mongoose.Schema({
+  // Demographics
   name: { type: String, required: true },
   age: { type: Number, required: true },
   gender: { type: String, required: true },
+  country: { type: String, default: '' },
+
+  // Behavior
+  deviceType: { type: String, enum: ['mobile', 'desktop', 'tablet', ''], default: '' },
+  lastLogin: { type: Date },
+  registrationDate: { type: Date, default: Date.now },
+  activeInLastDays: { type: Number, default: 0 },
+
+  // Engagement
   logins: { type: Number, default: 0 },
-  clickRate: { type: Number, default: 0 }
+  clickRate: { type: Number, default: 0 },
+  subscriptionStatus: { 
+    type: String, 
+    enum: ['active', 'inactive', 'trial', ''], 
+    default: '' 
+  },
+  purchaseValue: { type: Number, default: 0 }
 }, {
-  timestamps: true // Adds createdAt and updatedAt fields
+  timestamps: true
 });
 
 const User = mongoose.model('User', userSchema);
@@ -56,6 +72,7 @@ const User = mongoose.model('User', userSchema);
 // Define Segment schema
 const segmentSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  description: { type: String, default: '' },
   filters: { type: Object, required: true }
 }, {
   timestamps: true
@@ -65,11 +82,76 @@ const Segment = mongoose.model('Segment', segmentSchema);
 
 // Sample data
 const sampleUsers = [
-  { name: 'John Doe', age: 25, gender: 'male', logins: 5, clickRate: 45 },
-  { name: 'Jane Smith', age: 30, gender: 'female', logins: 10, clickRate: 65 },
-  { name: 'Sam Johnson', age: 22, gender: 'male', logins: 2, clickRate: 20 },
-  { name: 'Anna Lee', age: 28, gender: 'female', logins: 8, clickRate: 50 },
-  { name: 'Mike Brown', age: 35, gender: 'male', logins: 15, clickRate: 75 }
+  { 
+    name: 'John Doe', 
+    age: 25, 
+    gender: 'male', 
+    country: 'USA',
+    deviceType: 'mobile',
+    lastLogin: new Date('2024-03-20'),
+    registrationDate: new Date('2024-01-01'),
+    activeInLastDays: 2,
+    logins: 5, 
+    clickRate: 45,
+    subscriptionStatus: 'active',
+    purchaseValue: 150
+  },
+  { 
+    name: 'Jane Smith', 
+    age: 30, 
+    gender: 'female', 
+    country: 'Canada',
+    deviceType: 'desktop',
+    lastLogin: new Date('2024-03-21'),
+    registrationDate: new Date('2024-01-15'),
+    activeInLastDays: 1,
+    logins: 10, 
+    clickRate: 65,
+    subscriptionStatus: 'trial',
+    purchaseValue: 75
+  },
+  { 
+    name: 'Sam Johnson', 
+    age: 22, 
+    gender: 'male', 
+    country: 'UK',
+    deviceType: 'mobile',
+    lastLogin: new Date('2024-03-15'),
+    registrationDate: new Date('2024-02-01'),
+    activeInLastDays: 7,
+    logins: 2, 
+    clickRate: 20,
+    subscriptionStatus: 'inactive',
+    purchaseValue: 0
+  },
+  { 
+    name: 'Anna Lee', 
+    age: 28, 
+    gender: 'female', 
+    country: 'Australia',
+    deviceType: 'tablet',
+    lastLogin: new Date('2024-03-22'),
+    registrationDate: new Date('2024-02-15'),
+    activeInLastDays: 0,
+    logins: 8, 
+    clickRate: 50,
+    subscriptionStatus: 'active',
+    purchaseValue: 200
+  },
+  { 
+    name: 'Mike Brown', 
+    age: 35, 
+    gender: 'male', 
+    country: 'USA',
+    deviceType: 'desktop',
+    lastLogin: new Date('2024-03-21'),
+    registrationDate: new Date('2024-01-20'),
+    activeInLastDays: 1,
+    logins: 15, 
+    clickRate: 75,
+    subscriptionStatus: 'active',
+    purchaseValue: 300
+  }
 ];
 
 // Insert sample data only if the collection is empty
@@ -91,65 +173,72 @@ mongoose.connection.once('open', () => {
 });
 
 // API Routes
-app.get('/api/segments', async (req, res) => {
-  try {
-    const segments = await Segment.find().sort({ createdAt: -1 });
-    res.json(segments);
-  } catch (error) {
-    console.error('Error fetching segments:', error);
-    res.status(500).json({ error: 'Error fetching segments' });
-  }
-});
-
-app.post('/api/segments', async (req, res) => {
-  const { name, filters } = req.body;
-  
-  if (!name || !filters) {
-    return res.status(400).json({ error: 'Segment name and filters are required.' });
-  }
-
-  const newSegment = new Segment({ name, filters });
-  
-  try {
-    await newSegment.save();
-    res.status(201).json(newSegment);
-  } catch (error) {
-    console.error('Error saving segment:', error);
-    res.status(500).json({ error: 'Error saving segment' });
-  }
-});
-
 app.post('/api/users/segment', async (req, res) => {
   const { filters } = req.body;
   const query = {};
 
   try {
-    // Name filter
+    // Demographics filters
     if (filters.name) {
       query.name = new RegExp(filters.name, 'i');
     }
 
-    // Age range filter
-    if (filters.ageRange) {
-      query.age = {
-        $gte: filters.ageRange.min || 0,
-        $lte: filters.ageRange.max || 100
-      };
+    if (filters.ageRange && (filters.ageRange.min || filters.ageRange.max)) {
+      query.age = {};
+      if (filters.ageRange.min) query.age.$gte = Number(filters.ageRange.min);
+      if (filters.ageRange.max) query.age.$lte = Number(filters.ageRange.max);
     }
 
-    // Gender filter
     if (filters.gender && filters.gender !== 'all') {
       query.gender = filters.gender;
     }
 
-    // Minimum logins filter
-    if (filters.logins) {
-      query.logins = { $gte: filters.logins };
+    if (filters.country) {
+      query.country = new RegExp(filters.country, 'i');
     }
 
-    // Minimum click rate filter
+    // Behavior filters
+    if (filters.deviceType) {
+      query.deviceType = filters.deviceType;
+    }
+
+    if (filters.activeInLastDays) {
+      const daysAgo = new Date();
+      daysAgo.setDate(daysAgo.getDate() - Number(filters.activeInLastDays));
+      query.lastLogin = { $gte: daysAgo };
+    }
+
+    if (filters.registrationDateRange) {
+      query.registrationDate = {};
+      if (filters.registrationDateRange.min) {
+        query.registrationDate.$gte = new Date(filters.registrationDateRange.min);
+      }
+      if (filters.registrationDateRange.max) {
+        query.registrationDate.$lte = new Date(filters.registrationDateRange.max);
+      }
+    }
+
+    // Engagement filters
+    if (filters.logins) {
+      query.logins = { $gte: Number(filters.logins) };
+    }
+
     if (filters.clickRate) {
-      query.clickRate = { $gte: filters.clickRate };
+      query.clickRate = { $gte: Number(filters.clickRate) };
+    }
+
+    if (filters.subscriptionStatus && filters.subscriptionStatus !== 'all') {
+      query.subscriptionStatus = filters.subscriptionStatus;
+    }
+
+    if (filters.purchaseValue && (filters.purchaseValue.min || filters.purchaseValue.max)) {
+      query.purchaseValue = {};
+      if (filters.purchaseValue.min) {
+        query.purchaseValue.$gte = Number(filters.purchaseValue.min);
+      }
+      if (filters.purchaseValue.max) {
+        query.purchaseValue.$lte = Number(filters.purchaseValue.max);
+      }
     }
 
     const users = await User.find(query).sort({ createdAt: -1 });
@@ -160,13 +249,21 @@ app.post('/api/users/segment', async (req, res) => {
   }
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something broke!' });
-});
+// Segment routes remain the same, just adding description field handling
+app.post('/api/segments', async (req, res) => {
+  const { name, description, filters } = req.body;
+  
+  if (!name || !filters) {
+    return res.status(400).json({ error: 'Segment name and filters are required.' });
+  }
 
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  const newSegment = new Segment({ name, description, filters });
+  
+  try {
+    await newSegment.save();
+    res.status(201).json(newSegment);
+  } catch (error) {
+    console.error('Error saving segment:', error);
+    res.status(500).json({ error: 'Error saving segment' });
+  }
 });
